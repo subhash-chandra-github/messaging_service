@@ -5,7 +5,3 @@ Your service should provide:
     Fetch a conversation’s history, paginated.
     List the conversations a given user is part of.
     Persist messages with sensible ordering, and enforce who is allowed to read which conversation.
-What a strong service demonstrates
-    History pagination stays stable even as new messages arrive (no duplicates or skipped messages).
-    A user cannot read a conversation they are not part of.
-    Send, paginated fetch, and an authorization-denied read are all covered by tests.
