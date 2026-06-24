@@ -13,6 +13,7 @@ import com.subhash.messaging.repository.ConversationRepository;
 import com.subhash.messaging.repository.MessageRepository;
 import com.subhash.messaging.repository.ParticipantsRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -32,8 +34,11 @@ public class ConversationService {
 
     @Transactional(readOnly = true)
     public List<ConversationResponse> listUserConversations(Long userId) {
+        log.debug("listUserConversations: userId={}", userId);
+
         List<Participants> userParticipations = participantsRepository.findByUserId(userId);
         if (userParticipations.isEmpty()) {
+            log.debug("No conversations found for userId={}", userId);
             return List.of();
         }
 
@@ -41,6 +46,7 @@ public class ConversationService {
                 .map(p -> p.getConversation().getId())
                 .distinct()
                 .toList();
+        log.debug("Found {} conversation(s) for userId={}: {}", conversationIds.size(), userId, conversationIds);
 
         Map<Long, List<Long>> participantsByConversation = participantsRepository
                 .findByConversationIdIn(conversationIds)
@@ -52,7 +58,7 @@ public class ConversationService {
 
         List<Conversation> conversations = conversationRepository.findAllById(conversationIds);
 
-        return conversations.stream()
+        List<ConversationResponse> result = conversations.stream()
                 .map(conv -> {
                     MessageResponse lastMessage = messageRepository
                             .findFirstByConversationIdOrderBySentAtDesc(conv.getId())
@@ -67,16 +73,27 @@ public class ConversationService {
                             .build();
                 })
                 .toList();
+
+        log.info("listUserConversations: returning {} conversation(s) for userId={}", result.size(), userId);
+        return result;
     }
 
     @Transactional(readOnly = true)
     public CursorPageResponse<MessageResponse> getConversationMessages(
             Long requesterId, Long conversationId, Long cursor, int size) {
 
+        log.debug("getConversationMessages: requesterId={}, conversationId={}, cursor={}, size={}",
+                requesterId, conversationId, cursor, size);
+
         conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
+                .orElseThrow(() -> {
+                    log.warn("getConversationMessages: conversationId={} not found", conversationId);
+                    return new ResourceNotFoundException("Conversation", conversationId);
+                });
 
         if (!participantsRepository.existsByConversationIdAndUserId(conversationId, requesterId)) {
+            log.warn("getConversationMessages: access denied — userId={} is not a participant of conversationId={}",
+                    requesterId, conversationId);
             throw new ForbiddenException("Access denied to conversation " + conversationId);
         }
 
@@ -86,8 +103,10 @@ public class ConversationService {
 
         boolean hasMore = rows.size() > size;
         List<Message> page = hasMore ? rows.subList(0, size) : rows;
-
         Long nextCursor = hasMore ? page.get(page.size() - 1).getId() : null;
+
+        log.info("getConversationMessages: conversationId={}, returned={}, hasMore={}, nextCursor={}",
+                conversationId, page.size(), hasMore, nextCursor);
 
         return CursorPageResponse.<MessageResponse>builder()
                 .messages(page.stream().map(MessageMapper::toResponse).toList())

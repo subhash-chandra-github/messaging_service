@@ -12,11 +12,13 @@ import com.subhash.messaging.repository.ConversationRepository;
 import com.subhash.messaging.repository.MessageRepository;
 import com.subhash.messaging.repository.ParticipantsRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -28,8 +30,10 @@ public class MessageService {
 
     public MessageResponse sendMessage(Long senderId, SendMessageRequest request) {
         Long recipientId = request.getRecipientId();
+        log.debug("sendMessage: senderId={}, recipientId={}", senderId, recipientId);
 
         if (senderId.equals(recipientId)) {
+            log.warn("sendMessage rejected: sender and recipient are the same user ({})", senderId);
             throw new BadRequestException("Cannot send a message to yourself");
         }
 
@@ -41,10 +45,16 @@ public class MessageService {
             conversation = conversationRepository.save(new Conversation());
             participantsRepository.save(new Participants(null, conversation, senderId));
             participantsRepository.save(new Participants(null, conversation, recipientId));
+            log.info("New conversation created: conversationId={}, participants=[{}, {}]",
+                    conversation.getId(), senderId, recipientId);
         } else if (existingConversationIds.size() == 1) {
-            conversation = conversationRepository.findById(existingConversationIds.get(0))
-                    .orElseThrow(() -> new ResourceNotFoundException("Conversation", existingConversationIds.get(0)));
+            Long conversationId = existingConversationIds.get(0);
+            conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
+            log.debug("Reusing existing conversationId={}", conversationId);
         } else {
+            log.error("Data integrity error: {} conversations found between users {} and {}",
+                    existingConversationIds.size(), senderId, recipientId);
             throw new IllegalStateException("Data integrity error: multiple conversations found between users "
                     + senderId + " and " + recipientId);
         }
@@ -54,6 +64,9 @@ public class MessageService {
         message.setSenderId(senderId);
         message.setContent(request.getContent());
 
-        return MessageMapper.toResponse(messageRepository.save(message));
+        MessageResponse response = MessageMapper.toResponse(messageRepository.save(message));
+        log.info("Message sent: messageId={}, conversationId={}, senderId={}, recipientId={}",
+                response.getId(), response.getConversationId(), senderId, recipientId);
+        return response;
     }
 }
