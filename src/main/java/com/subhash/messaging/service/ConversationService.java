@@ -1,7 +1,7 @@
 package com.subhash.messaging.service;
 
+import com.subhash.messaging.common.CursorPageResponse;
 import com.subhash.messaging.common.MessageMapper;
-import com.subhash.messaging.common.PagedResponse;
 import com.subhash.messaging.dto.ConversationResponse;
 import com.subhash.messaging.dto.MessageResponse;
 import com.subhash.messaging.entity.Conversation;
@@ -13,7 +13,7 @@ import com.subhash.messaging.repository.ConversationRepository;
 import com.subhash.messaging.repository.MessageRepository;
 import com.subhash.messaging.repository.ParticipantsRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -70,8 +70,8 @@ public class ConversationService {
     }
 
     @Transactional(readOnly = true)
-    public PagedResponse<MessageResponse> getConversationMessages(
-            Long requesterId, Long conversationId, Pageable pageable) {
+    public CursorPageResponse<MessageResponse> getConversationMessages(
+            Long requesterId, Long conversationId, Long cursor, int size) {
 
         conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new ResourceNotFoundException("Conversation", conversationId));
@@ -80,7 +80,19 @@ public class ConversationService {
             throw new ForbiddenException("Access denied to conversation " + conversationId);
         }
 
-        return MessageMapper.toPagedResponse(
-                messageRepository.findByConversationIdOrderBySentAtAsc(conversationId, pageable));
+        long afterId = cursor != null ? cursor : 0L;
+        List<Message> rows = messageRepository
+                .findByConversationIdAndIdGreaterThanOrderBySentAtAsc(conversationId, afterId, Limit.of(size + 1));
+
+        boolean hasMore = rows.size() > size;
+        List<Message> page = hasMore ? rows.subList(0, size) : rows;
+
+        Long nextCursor = hasMore ? page.get(page.size() - 1).getId() : null;
+
+        return CursorPageResponse.<MessageResponse>builder()
+                .messages(page.stream().map(MessageMapper::toResponse).toList())
+                .nextCursor(nextCursor)
+                .hasMore(hasMore)
+                .build();
     }
 }

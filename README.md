@@ -70,7 +70,7 @@ Every read endpoint checks `participants` for `(conversationId, requesterId)` be
 |---|---|---|---|
 | `POST` | `/api/v1/messages` | `X-User-Id` | Send a message (creates conversation if needed) |
 | `GET` | `/api/v1/conversations` | `X-User-Id` | List all conversations for a user |
-| `GET` | `/api/v1/conversations/{id}/messages` | `X-User-Id` | Get paginated message history |
+| `GET` | `/api/v1/conversations/{id}/messages` | `X-User-Id` | Get cursor-paginated message history |
 
 ---
 
@@ -188,35 +188,45 @@ Expected: `200 OK`
 
 ---
 
-### Fetch paginated message history (authorized user)
+### Fetch first page of message history (no cursor)
 
 ```bash
-curl -s "http://localhost:8080/api/v1/conversations/1/messages?page=0&size=10" \
+curl -s "http://localhost:8080/api/v1/conversations/1/messages?size=10" \
   -H "X-User-Id: 1" | jq .
 ```
 
 Expected: `200 OK`
 ```json
 {
-  "content": [
+  "messages": [
     { "id": 1, "conversationId": 1, "senderId": 1, "content": "Hey, how are you?", "sentAt": "..." },
     { "id": 2, "conversationId": 1, "senderId": 2, "content": "I am good, thanks!", "sentAt": "..." }
   ],
-  "page": 0,
-  "size": 10,
-  "totalElements": 2,
-  "totalPages": 1,
-  "last": true
+  "nextCursor": 2,
+  "hasMore": false
 }
 ```
 
+> `nextCursor` is the `id` of the last message on the current page. Pass it as `cursor` on the next request to fetch the following page. When `hasMore` is `false`, you have reached the end.
+
 ---
 
-### Fetch second page of history
+### Fetch next page using cursor
 
 ```bash
-curl -s "http://localhost:8080/api/v1/conversations/1/messages?page=1&size=1" \
+curl -s "http://localhost:8080/api/v1/conversations/1/messages?cursor=2&size=10" \
   -H "X-User-Id: 1" | jq .
+```
+
+Expected: `200 OK` — returns messages with `id > 2`, ordered by `sentAt ASC`.
+```json
+{
+  "messages": [
+    { "id": 3, "conversationId": 1, "senderId": 1, "content": "What's up?", "sentAt": "..." }
+  ],
+  "nextCursor": null,
+  "hasMore": false
+}
 ```
 
 ---

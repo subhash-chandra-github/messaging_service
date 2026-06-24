@@ -1,13 +1,10 @@
 package com.subhash.messaging.controller;
 
-import com.subhash.messaging.common.PagedResponse;
+import com.subhash.messaging.common.CursorPageResponse;
 import com.subhash.messaging.dto.ConversationResponse;
 import com.subhash.messaging.dto.MessageResponse;
 import com.subhash.messaging.service.ConversationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,10 +23,11 @@ public class ConversationController {
     }
 
     @GetMapping("/{conversationId}/messages")
-    public PagedResponse<MessageResponse> getMessages(
+    public CursorPageResponse<MessageResponse> getMessages(
             @RequestHeader("X-User-Id") Long requesterId,
             @PathVariable Long conversationId,
-            @PageableDefault(size = 20, sort = "sentAt", direction = Sort.Direction.ASC) Pageable pageable) {
-        return conversationService.getConversationMessages(requesterId, conversationId, pageable);
+            @RequestParam(required = false) Long cursor,
+            @RequestParam(defaultValue = "20") int size) {
+        return conversationService.getConversationMessages(requesterId, conversationId, cursor, size);
     }
 }
