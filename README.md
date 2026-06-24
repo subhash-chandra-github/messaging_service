@@ -117,16 +117,44 @@ export MYSQL_PASSWORD=yourpassword
 ./mvnw spring-boot:run
 ```
 
-On first startup Hibernate runs DDL (`ddl-auto: update`) and creates the three tables automatically. The service listens on **port 8080**.
+On first startup Hibernate runs DDL (`ddl-auto: update`) and creates the three tables automatically. The `dev` profile is active by default, so the **DataSeeder** runs and pre-loads the following conversations:
+
+| Users | Messages | Purpose |
+|---|---|---|
+| 1 ↔ 2 | 5 | General conversation |
+| 1 ↔ 3 | 3 | Project discussion |
+| 2 ↔ 3 | 2 | Code review |
+| 3 ↔ 4 | 3 | Meeting coordination |
+| **5 ↔ 6** | **50** | **Cursor pagination testing** |
+
+The seeder is idempotent — re-running the app will not duplicate data.
+
+The service listens on **port 8080**.
 
 ---
 
 ## Testing with curl
 
-> All examples assume the service is running on `localhost:8080`.  
+> All examples assume the service is running on `localhost:8080` with seeded data.  
 > Install `jq` for pretty-printed JSON output (optional but recommended).
 
-### Send the first message (creates a new conversation)
+### Step 1 — Discover seeded conversation IDs
+
+List conversations for any seeded user to get their conversation IDs:
+
+```bash
+# User 1 has 2 conversations (with user 2 and user 3)
+curl -s http://localhost:8080/api/v1/conversations -H "X-User-Id: 1" | jq '.[].id'
+
+# User 5 has the 50-message conversation (with user 6)
+curl -s http://localhost:8080/api/v1/conversations -H "X-User-Id: 5" | jq '.[0].id'
+```
+
+Use the returned IDs in the examples below.
+
+---
+
+### Send a new message (creates a conversation)
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/messages \
@@ -176,11 +204,11 @@ Expected: `200 OK`
     "participantIds": [1, 2],
     "createdAt": "2024-06-24T10:00:00",
     "lastMessage": {
-      "id": 2,
+      "id": 5,
       "conversationId": 1,
-      "senderId": 2,
-      "content": "I am good, thanks!",
-      "sentAt": "2024-06-24T10:01:00"
+      "senderId": 1,
+      "content": "Perfect, I'll book the tickets.",
+      "sentAt": "2024-06-24T10:04:00"
     }
   }
 ]
@@ -188,26 +216,40 @@ Expected: `200 OK`
 
 ---
 
-### Fetch first page of message history (no cursor)
+### Cursor pagination — walk through 50 messages (users 5 ↔ 6)
 
+Get the conversation ID first:
 ```bash
-curl -s "http://localhost:8080/api/v1/conversations/1/messages?size=10" \
-  -H "X-User-Id: 1" | jq .
+CONV_ID=$(curl -s http://localhost:8080/api/v1/conversations \
+  -H "X-User-Id: 5" | jq -r '.[0].id')
+echo "Conversation ID: $CONV_ID"
 ```
 
-Expected: `200 OK`
-```json
-{
-  "messages": [
-    { "id": 1, "conversationId": 1, "senderId": 1, "content": "Hey, how are you?", "sentAt": "..." },
-    { "id": 2, "conversationId": 1, "senderId": 2, "content": "I am good, thanks!", "sentAt": "..." }
-  ],
-  "nextCursor": 2,
-  "hasMore": false
-}
+**Page 1 — no cursor (messages [1]–[10]):**
+```bash
+curl -s "http://localhost:8080/api/v1/conversations/$CONV_ID/messages?size=10" \
+  -H "X-User-Id: 5" | jq '{messages: [.messages[].content], nextCursor: .nextCursor, hasMore: .hasMore}'
 ```
 
-> `nextCursor` is the `id` of the last message on the current page. Pass it as `cursor` on the next request to fetch the following page. When `hasMore` is `false`, you have reached the end.
+Expected: `hasMore: true`, `nextCursor` set to the ID of message `[10]`.
+
+**Page 2 — pass nextCursor (messages [11]–[20]):**
+```bash
+curl -s "http://localhost:8080/api/v1/conversations/$CONV_ID/messages?cursor=<nextCursor>&size=10" \
+  -H "X-User-Id: 5" | jq '{messages: [.messages[].content], nextCursor: .nextCursor, hasMore: .hasMore}'
+```
+
+**Pages 3–4 — repeat with each new `nextCursor`.**
+
+**Page 5 — last page (messages [41]–[50]):**
+```bash
+curl -s "http://localhost:8080/api/v1/conversations/$CONV_ID/messages?cursor=<nextCursor>&size=10" \
+  -H "X-User-Id: 5" | jq '{messages: [.messages[].content], nextCursor: .nextCursor, hasMore: .hasMore}'
+```
+
+Expected: `hasMore: false`, `nextCursor: null`.
+
+> Each message content is prefixed with its sequence number (e.g. `[1] Hey, just pushed...`) so you can verify the correct page boundaries at a glance.
 
 ---
 
