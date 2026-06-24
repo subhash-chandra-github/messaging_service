@@ -1,4 +1,4 @@
-package com.subhash.messaging.messaging_service;
+package com.subhash.messaging;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
