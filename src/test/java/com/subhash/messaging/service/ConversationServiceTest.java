@@ -6,6 +6,7 @@ import com.subhash.messaging.dto.MessageResponse;
 import com.subhash.messaging.dto.SendMessageRequest;
 import com.subhash.messaging.exception.ForbiddenException;
 import com.subhash.messaging.exception.ResourceNotFoundException;
+import com.subhash.messaging.repository.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ class ConversationServiceTest {
 
     @Autowired ConversationService conversationService;
     @Autowired MessageService messageService;
+    @Autowired MessageRepository messageRepository;
 
     private Long conversationId;
 
@@ -79,10 +81,9 @@ class ConversationServiceTest {
     void getMessages_returnsEmpty_whenConversationHasNoMessages() {
         // create a fresh conversation by sending one message then check history after
         // (edge case: conversation exists but cursor is past all messages)
-        CursorPageResponse<MessageResponse> allMessages = conversationService
-                .getConversationMessages(1L, conversationId, null, 10);
-
-        Long lastId = allMessages.getMessages().get(allMessages.getMessages().size() - 1).getId();
+        Long lastId = messageRepository
+                .findFirstByConversationIdOrderBySentAtDesc(conversationId)
+                .orElseThrow().getId();
 
         CursorPageResponse<MessageResponse> beyondEnd = conversationService
                 .getConversationMessages(1L, conversationId, lastId, 10);

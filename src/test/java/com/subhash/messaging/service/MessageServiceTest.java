@@ -4,6 +4,7 @@ import com.subhash.messaging.dto.MessageResponse;
 import com.subhash.messaging.dto.SendMessageRequest;
 import com.subhash.messaging.exception.BadRequestException;
 import com.subhash.messaging.repository.ConversationRepository;
+import com.subhash.messaging.repository.MessageRepository;
 import com.subhash.messaging.repository.ParticipantsRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,13 +21,14 @@ class MessageServiceTest {
     @Autowired MessageService messageService;
     @Autowired ConversationRepository conversationRepository;
     @Autowired ParticipantsRepository participantsRepository;
+    @Autowired MessageRepository messageRepository;
 
     @Test
     void sendMessage_createsNewConversation_whenNoneExists() {
         MessageResponse response = send(1L, 2L, "Hello!");
 
-        assertThat(response.getId()).isNotNull();
         assertThat(response.getConversationId()).isNotNull();
+        assertThat(messageRepository.count()).isEqualTo(1);
         assertThat(response.getSenderId()).isEqualTo(1L);
         assertThat(response.getContent()).isEqualTo("Hello!");
         assertThat(response.getSentAt()).isNotNull();

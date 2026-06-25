@@ -31,6 +31,8 @@ com.subhash.messaging
 
 ### Data Model
 
+![ER Diagram](src/main/resources/er_diagram/er_diagram.png)
+
 ```
 conversations
   id          BIGINT PK AUTO_INCREMENT
@@ -50,6 +52,8 @@ messages
   sent_at          DATETIME(6) NOT NULL
   INDEX (conversation_id, sent_at)            -- efficient paginated history
 ```
+
+
 
 > There is no `users` table. User identity is a raw `Long` passed via the `X-User-Id` request header.
 

@@ -12,7 +12,6 @@ public class MessageMapper {
 
     public static MessageResponse toResponse(Message message) {
         return MessageResponse.builder()
-                .id(message.getId())
                 .conversationId(message.getConversation().getId())
                 .senderId(message.getSenderId())
                 .content(message.getContent())

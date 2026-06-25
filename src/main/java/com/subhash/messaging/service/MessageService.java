@@ -64,9 +64,9 @@ public class MessageService {
         message.setSenderId(senderId);
         message.setContent(request.getContent());
 
-        MessageResponse response = MessageMapper.toResponse(messageRepository.save(message));
+        Message saved = messageRepository.save(message);
         log.info("Message sent: messageId={}, conversationId={}, senderId={}, recipientId={}",
-                response.getId(), response.getConversationId(), senderId, recipientId);
-        return response;
+                saved.getId(), saved.getConversation().getId(), senderId, recipientId);
+        return MessageMapper.toResponse(saved);
     }
 }
